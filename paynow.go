@@ -32,10 +32,16 @@ const (
 	defaultInitiateURL = "https://www.paynow.co.zw/interface/remotetransaction"
 )
 
+// HTTPClient interface allows for mocking HTTP requests in tests.
+type HTTPClient interface {
+	PostForm(url string, data url.Values) (*http.Response, error)
+	Get(url string) (*http.Response, error)
+}
+
 // Client represents a Paynow API client.
 type Client struct {
 	config     Config
-	httpClient *http.Client
+	httpClient HTTPClient
 }
 
 // Config holds the configuration for the Paynow client.
@@ -51,6 +57,15 @@ func New(config Config) *Client {
 	return &Client{
 		config:     config,
 		httpClient: &http.Client{},
+	}
+}
+
+// NewWithHTTPClient creates a new Paynow client with a custom HTTP client.
+// This is useful for testing or custom HTTP configurations.
+func NewWithHTTPClient(config Config, httpClient HTTPClient) *Client {
+	return &Client{
+		config:     config,
+		httpClient: httpClient,
 	}
 }
 

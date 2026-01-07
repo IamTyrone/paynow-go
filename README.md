@@ -215,6 +215,80 @@ func main() {
 }
 ```
 
+## Testing
+
+All tests are located in the dedicated `test/` folder for better organization.
+
+Run all tests:
+
+```bash
+go test ./test/...
+```
+
+Run tests with coverage:
+
+```bash
+go test -cover ./test/...
+```
+
+Run tests with verbose output:
+
+```bash
+go test -v ./test/...
+```
+
+### Test Coverage
+
+The SDK maintains high test coverage:
+
+| Package         | Coverage |
+| --------------- | -------- |
+| `paynow`        | ~94%     |
+| `internal/hash` | ~97%     |
+| `types`         | 100%     |
+
+### Mocking for Tests
+
+The SDK provides an `HTTPClient` interface for mocking HTTP requests in your tests:
+
+```go
+type MockHTTPClient struct {
+    PostFormFunc func(url string, data url.Values) (*http.Response, error)
+    GetFunc      func(url string) (*http.Response, error)
+}
+
+func (m *MockHTTPClient) PostForm(url string, data url.Values) (*http.Response, error) {
+    return m.PostFormFunc(url, data)
+}
+
+func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
+    return m.GetFunc(url)
+}
+
+// Usage
+mockClient := &MockHTTPClient{
+    PostFormFunc: func(url string, data url.Values) (*http.Response, error) {
+        // Return mock response
+        return &http.Response{
+            StatusCode: 200,
+            Body:       io.NopCloser(bytes.NewBufferString("status=Ok&hash=...")),
+        }, nil
+    },
+}
+
+client := paynow.NewWithHTTPClient(config, mockClient)
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+**Note:** All PRs must pass the automated test suite before merging. Tests run automatically on every PR via GitHub Actions.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
