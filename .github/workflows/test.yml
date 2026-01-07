@@ -37,7 +37,7 @@ jobs:
           install-go: false
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./test/...
+        run: go test -v -race -coverprofile=coverage.out ./test
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4

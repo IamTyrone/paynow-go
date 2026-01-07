@@ -222,19 +222,19 @@ All tests are located in the dedicated `test/` folder for better organization.
 Run all tests:
 
 ```bash
-go test ./test/...
+go test -v ./test
 ```
 
 Run tests with coverage:
 
 ```bash
-go test -cover ./test/...
+go test -cover ./test
 ```
 
 Run tests with verbose output:
 
 ```bash
-go test -v ./test/...
+go test -v ./test
 ```
 
 ### Test Coverage

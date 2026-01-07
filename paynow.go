@@ -212,7 +212,9 @@ func (c *Client) parseStatusResponse(body string) (*StatusResponse, error) {
 	}
 
 	var amount float64
-	fmt.Sscanf(values.Get("amount"), "%f", &amount)
+	if _, err := fmt.Sscanf(values.Get("amount"), "%f", &amount); err != nil {
+		return nil, fmt.Errorf("failed to parse amount: %w", err)
+	}
 
 	return &StatusResponse{
 		Reference:       values.Get("reference"),
