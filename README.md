@@ -1,6 +1,11 @@
 # Paynow Zimbabwe Go SDK
 
-A Go SDK for integrating with the [Paynow Zimbabwe](https://www.paynow.co.zw/) payment gateway.
+A clean, idiomatic Go SDK for the [Paynow Zimbabwe](https://www.paynow.co.zw/) payment gateway, ported from the official [Node.js](https://github.com/paynow/Paynow-NodeJS-SDK) and [Python](https://github.com/paynow/Paynow-Python-SDK) SDKs.
+
+- **Web payments** — redirect the customer to Paynow to choose how to pay.
+- **Mobile (express checkout)** — charge EcoCash, OneMoney or InnBucks directly.
+- **Status polling** and **result-URL webhooks**, with automatic hash verification.
+- Context-aware, dependency-free (standard library only), and easy to mock in tests.
 
 ## Installation
 
@@ -8,287 +13,163 @@ A Go SDK for integrating with the [Paynow Zimbabwe](https://www.paynow.co.zw/) p
 go get github.com/IamTyrone/paynow-go
 ```
 
-## Quick Start
+Requires Go 1.21 or newer.
+
+## Getting started
+
+Create a client with your integration credentials (available from your Paynow merchant dashboard):
 
 ```go
-package main
-
-import (
-    "fmt"
-    "log"
-
-    "github.com/IamTyrone/paynow-go"
-    "github.com/IamTyrone/paynow-go/types"
+client := paynow.New(
+    "YOUR_INTEGRATION_ID",
+    "YOUR_INTEGRATION_KEY",
+    paynow.WithResultURL("https://example.com/paynow/result"), // where Paynow POSTs status updates
+    paynow.WithReturnURL("https://example.com/paynow/return"), // where the customer is sent back to
 )
-
-func main() {
-    // Create a new Paynow client
-    client := paynow.New(paynow.Config{
-        IntegrationID:  "YOUR_INTEGRATION_ID",
-        IntegrationKey: "YOUR_INTEGRATION_KEY",
-        ResultURL:      "https://example.com/paynow/result",
-        ReturnURL:      "https://example.com/paynow/return",
-    })
-
-    // Send a mobile payment (EcoCash)
-    response, err := client.SendMobile(paynow.Payment{
-        Reference: "INV-1001",
-        Amount:    10.00,
-        AuthEmail: "customer@example.com",
-        Phone:     "0771234567",
-        Method:    types.MethodEcocash,
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    fmt.Printf("Status: %s\n", response.Status)
-    fmt.Printf("Poll URL: %s\n", response.PollURL)
-}
 ```
 
-## Configuration
-
-| Field            | Description                                         |
-| ---------------- | --------------------------------------------------- |
-| `IntegrationID`  | Your Paynow integration ID                          |
-| `IntegrationKey` | Your Paynow integration key                         |
-| `ResultURL`      | URL where Paynow will post transaction results      |
-| `ReturnURL`      | URL where the user will be redirected after payment |
-
-You can find your integration details in your [Paynow Dashboard](https://www.paynow.co.zw/).
-
-## Payment Methods
-
-Currently supported payment methods:
-
-| Method  | Constant              |
-| ------- | --------------------- |
-| EcoCash | `types.MethodEcocash` |
-
-## API Reference
-
-### Creating a Client
+Build up a payment. A payment behaves like a shopping cart — add one or more items and the total is computed for you:
 
 ```go
-client := paynow.New(paynow.Config{
-    IntegrationID:  "your-id",
-    IntegrationKey: "your-key",
-    ResultURL:      "https://example.com/result",
-    ReturnURL:      "https://example.com/return",
-})
+payment := client.CreatePayment("INV-1001", "customer@example.com")
+payment.Add("T-shirt", 10.00, 2) // title, unit amount, optional quantity (default 1)
+payment.Add("Delivery", 3.50)
 ```
 
-### Sending a Mobile Payment
+### Web payment
 
 ```go
-response, err := client.SendMobile(paynow.Payment{
-    Reference: "INV-1001",
-    Amount:    10.00,
-    AuthEmail: "customer@example.com",
-    Phone:     "0771234567",
-    Method:    types.MethodEcocash,
-})
-```
-
-**Payment Fields:**
-
-| Field       | Type            | Required | Description                          |
-| ----------- | --------------- | -------- | ------------------------------------ |
-| `Reference` | `string`        | Yes      | Unique transaction reference         |
-| `Amount`    | `float64`       | Yes      | Payment amount                       |
-| `AuthEmail` | `string`        | Yes      | Customer's email address             |
-| `Phone`     | `string`        | Yes      | Customer's phone number              |
-| `Method`    | `PaymentMethod` | No       | Payment method (defaults to EcoCash) |
-
-**Response Fields:**
-
-| Field        | Type     | Description                        |
-| ------------ | -------- | ---------------------------------- |
-| `Status`     | `string` | Transaction status                 |
-| `BrowserURL` | `string` | URL for browser-based payment      |
-| `PollURL`    | `string` | URL to poll for transaction status |
-| `Hash`       | `string` | Response hash                      |
-| `Error`      | `string` | Error message (if any)             |
-
-### Polling Transaction Status
-
-```go
-status, err := client.PollTransaction(response.PollURL)
+resp, err := client.Send(context.Background(), payment)
 if err != nil {
     log.Fatal(err)
 }
 
-if status.Status.IsPaid() {
-    fmt.Println("Payment successful!")
+// Redirect the customer to resp.RedirectURL to complete payment,
+// and keep resp.PollURL to check the status later.
+fmt.Println(resp.RedirectURL)
+```
+
+### Mobile (express checkout)
+
+Mobile transactions charge the customer directly and require a valid auth email.
+
+```go
+resp, err := client.SendMobile(context.Background(), payment, "0771234567", paynow.MethodEcocash)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Println(resp.PollURL)
+if resp.Instructions != "" {
+    fmt.Println(resp.Instructions) // e.g. a USSD prompt for the customer to confirm
 }
 ```
 
-**Status Response Fields:**
+Supported methods: `paynow.MethodEcocash`, `paynow.MethodOneMoney`, `paynow.MethodInnbucks`.
 
-| Field             | Type                | Description                |
-| ----------------- | ------------------- | -------------------------- |
-| `Reference`       | `string`            | Your transaction reference |
-| `Amount`          | `float64`           | Transaction amount         |
-| `PaynowReference` | `string`            | Paynow's reference number  |
-| `PollURL`         | `string`            | URL for future polling     |
-| `Status`          | `TransactionStatus` | Current transaction status |
-| `Hash`            | `string`            | Response hash              |
-
-### Transaction Status Helpers
+For InnBucks, the response carries the payment code, a deep link and a QR code:
 
 ```go
-status.Status.IsPaid()    // Returns true if payment was successful
-status.Status.IsPending() // Returns true if payment is still pending
-status.Status.IsFailed()  // Returns true if payment failed or was cancelled
+if resp.InnBucks != nil {
+    fmt.Println("Code:", resp.InnBucks.AuthorizationCode)
+    fmt.Println("Deep link:", resp.InnBucks.DeepLinkURL)
+    fmt.Println("QR code:", resp.InnBucks.QRCodeURL)
+}
 ```
 
-**Possible Status Values:**
+## Checking transaction status
 
-| Status      | Description                  |
-| ----------- | ---------------------------- |
-| `Created`   | Transaction created          |
-| `Sent`      | Transaction sent to provider |
-| `Pending`   | Awaiting payment             |
-| `Paid`      | Payment successful           |
-| `Cancelled` | Transaction cancelled        |
-| `Failed`    | Transaction failed           |
-| `Refunded`  | Transaction refunded         |
-
-## Complete Example
+### Polling
 
 ```go
-package main
+status, err := client.PollTransaction(context.Background(), resp.PollURL)
+if err != nil {
+    log.Fatal(err)
+}
 
-import (
-    "fmt"
-    "log"
-    "time"
+switch {
+case status.Status.IsPaid():
+    fmt.Println("Paid!")
+case status.Status.IsFailed():
+    fmt.Println("Failed.")
+default:
+    fmt.Println("Still pending:", status.Status)
+}
+```
 
-    "github.com/IamTyrone/paynow-go"
-    "github.com/IamTyrone/paynow-go/types"
-)
+### Result-URL webhook
 
-func main() {
-    client := paynow.New(paynow.Config{
-        IntegrationID:  "YOUR_INTEGRATION_ID",
-        IntegrationKey: "YOUR_INTEGRATION_KEY",
-        ResultURL:      "https://example.com/result",
-        ReturnURL:      "https://example.com/return",
-    })
+When a transaction's status changes, Paynow POSTs a status update to your result URL. Pass the raw request body to `ProcessStatusUpdate`; the hash is verified for you:
 
-    // Initiate payment
-    response, err := client.SendMobile(paynow.Payment{
-        Reference: "INV-1001",
-        Amount:    10.00,
-        AuthEmail: "customer@example.com",
-        Phone:     "0771234567",
-        Method:    types.MethodEcocash,
-    })
+```go
+func resultHandler(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+
+    status, err := client.ProcessStatusUpdate(string(body))
     if err != nil {
-        log.Fatalf("Failed to initiate payment: %v", err)
+        http.Error(w, "invalid update", http.StatusBadRequest)
+        return
     }
 
-    fmt.Printf("Payment initiated! Poll URL: %s\n", response.PollURL)
-
-    // Poll for status
-    for {
-        status, err := client.PollTransaction(response.PollURL)
-        if err != nil {
-            log.Fatalf("Failed to poll: %v", err)
-        }
-
-        fmt.Printf("Status: %s\n", status.Status)
-
-        if status.Status.IsPaid() {
-            fmt.Printf("Payment successful! Paynow Ref: %s\n", status.PaynowReference)
-            break
-        }
-
-        if status.Status.IsFailed() {
-            fmt.Println("Payment failed or cancelled")
-            break
-        }
-
-        time.Sleep(5 * time.Second)
+    if status.Paid {
+        // fulfil the order for status.Reference
     }
 }
 ```
 
-## Testing
+## Error handling
 
-All tests are located in the dedicated `test/` folder for better organization.
-
-Run all tests:
-
-```bash
-go test -v ./test
-```
-
-Run tests with coverage:
-
-```bash
-go test -cover ./test
-```
-
-Run tests with verbose output:
-
-```bash
-go test -v ./test
-```
-
-### Test Coverage
-
-The SDK maintains high test coverage:
-
-| Package         | Coverage |
-| --------------- | -------- |
-| `paynow`        | ~94%     |
-| `internal/hash` | ~97%     |
-| `types`         | 100%     |
-
-### Mocking for Tests
-
-The SDK provides an `HTTPClient` interface for mocking HTTP requests in your tests:
+Network, parsing and hash-verification problems are returned as regular errors. Business errors reported by Paynow (for example an invalid integration id) are returned as `*paynow.APIError`, alongside a populated response you can still inspect:
 
 ```go
-type MockHTTPClient struct {
-    PostFormFunc func(url string, data url.Values) (*http.Response, error)
-    GetFunc      func(url string) (*http.Response, error)
+resp, err := client.Send(ctx, payment)
+if err != nil {
+    var apiErr *paynow.APIError
+    if errors.As(err, &apiErr) {
+        fmt.Println("Paynow said:", apiErr.Message)
+    }
 }
-
-func (m *MockHTTPClient) PostForm(url string, data url.Values) (*http.Response, error) {
-    return m.PostFormFunc(url, data)
-}
-
-func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
-    return m.GetFunc(url)
-}
-
-// Usage
-mockClient := &MockHTTPClient{
-    PostFormFunc: func(url string, data url.Values) (*http.Response, error) {
-        // Return mock response
-        return &http.Response{
-            StatusCode: 200,
-            Body:       io.NopCloser(bytes.NewBufferString("status=Ok&hash=...")),
-        }, nil
-    },
-}
-
-client := paynow.NewWithHTTPClient(config, mockClient)
 ```
 
-## Contributing
+Sentinel errors you can match with `errors.Is`:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Error | Meaning |
+|-------|---------|
+| `paynow.ErrNoPayment` | A nil payment was passed. |
+| `paynow.ErrEmptyCart` | The payment has no items. |
+| `paynow.ErrNonPositiveTotal` | The total is not greater than zero. |
+| `paynow.ErrInvalidEmail` | A mobile payment lacks a valid auth email. |
+| `paynow.ErrMissingHash` | A response that should be hashed had no hash. |
+| `paynow.ErrHashMismatch` | A response hash did not match — possible tampering. |
 
-**Note:** All PRs must pass the automated test suite before merging. Tests run automatically on every PR via GitHub Actions.
+## Custom HTTP client
+
+By default the SDK uses a plain `*http.Client`. Supply your own (recommended, so you can set a timeout) with `WithHTTPClient`. Any type implementing `paynow.Doer` (which `*http.Client` satisfies) works, which also makes the SDK trivial to mock in tests:
+
+```go
+client := paynow.New(id, key,
+    paynow.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
+)
+```
+
+## Package layout
+
+The public API lives in the root `paynow` package, split into small, focused files:
+
+| File | Responsibility |
+|------|----------------|
+| `paynow.go` | `Client`, `New`, options |
+| `payment.go`, `cart.go` | Building up a payment and its cart |
+| `send.go` | `Send` / `SendMobile` and validation |
+| `poll.go` | `PollTransaction` / `ProcessStatusUpdate` |
+| `request.go`, `values.go` | Ordered request building and response parsing |
+| `response.go` | `InitResponse` / `StatusResponse` / `InnBucksInfo` |
+| `method.go`, `status.go` | Payment methods and transaction statuses |
+| `errors.go` | Sentinel errors and `APIError` |
+| `internal/hash` | SHA-512 request/response signing |
+
+A complete, runnable flow lives in [`example/main.go`](example/main.go).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).
