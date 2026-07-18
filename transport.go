@@ -22,7 +22,7 @@ func (c *Client) postForm(ctx context.Context, endpoint, body string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("paynow: request to %s failed: %w", endpoint, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

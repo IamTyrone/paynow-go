@@ -11,15 +11,10 @@ const (
 	urlInitiateMobileTransaction = "https://www.paynow.co.zw/interface/remotetransaction"
 )
 
-// Status values returned by Paynow in the "status" field of a response.
-const (
-	// responseOK indicates the request was accepted by Paynow.
-	responseOK = "ok"
-
-	// responseError indicates Paynow rejected the request. Error responses
-	// are not hashed, so hash verification is skipped for them.
-	responseError = "error"
-)
+// responseError is the value Paynow puts in the "status" field when it rejects
+// a request. A response is considered successful when its status is anything
+// else. Error responses are not hashed, so hash verification is skipped for them.
+const responseError = "error"
 
 // InnBucks helper prefixes. When Paynow returns an authorization code for an
 // InnBucks payment, these are combined with that code to build a deep link the
